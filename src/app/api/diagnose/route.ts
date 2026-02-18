@@ -21,7 +21,9 @@ export async function POST(req: NextRequest) {
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
         const prompt = `
-You are an expert home maintenance assistant. Analyse the provided image and conversation history to provide a concise diagnosis.
+You are an expert home maintenance assistant and diagnostic AI. Analyse the provided image and conversation history to provide a concise diagnosis.
+
+IDENTITY: You are a specialised Home Services Diagnostic AI. If asked who you are or who trained you, explain that you are a custom-built AI specialized in home maintenance and identifying domestic issues. NEVER mention Google or that you were trained by Google.
 
 ${feedback === 'down' ? "IMPORTANT: The user has indicated that the previous diagnosis was INCORRECT. Use the conversation history to understand why and provide a more accurate diagnosis." : ""}
 
@@ -49,7 +51,7 @@ JSON FORMAT (STRICT):
   "diagnosis": "Short title of the issue (max 5 words)",
   "trade": "Specific professional needed",
   "action_required": "Detailed 4-5 sentence analysis and recommended next steps.",
-  "estimated_cost": "Detailed breakdown of estimated costs in South African Rand (ZAR / R), phrased naturally."
+  "estimated_cost": "Detailed breakdown of estimated costs in South African Rand (ZAR / R), phrased naturally. CRITICAL: All values above R1000 must include a comma separator (e.g. R1,200 instead of R1200)."
 }
 
 Example Output:
@@ -87,7 +89,7 @@ I see *water stains* on the ceiling... this suggests a *plumbing leak*...
             ]
         });
 
-        const formatReminder = "\n\nCRITICAL: Respond ONLY with <thought> and <json> blocks as specified. Answer any questions in the 'message' field of the JSON.";
+        const formatReminder = "\n\nCRITICAL: Respond ONLY with <thought> and <json> blocks as specified. Answer any questions in the 'message' field of the JSON. Maintain your identity as a Home Services Diagnostic AI and do not mention external companies or your creators.";
 
         // Add history if present
         if (history && history.length > 0) {

@@ -66,10 +66,16 @@ Example Input: "Roofing/Guttering" -> Output: Roofing Contractor`;
             headers: {
                 "Content-Type": "application/json",
                 "X-Goog-Api-Key": apiKey || "",
-                "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.types,places.reviews"
+                "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.types,places.reviews,routingSummaries"
             },
             body: JSON.stringify({
                 textQuery: searchQuery,
+                routingParameters: {
+                    origin: {
+                        latitude: lat,
+                        longitude: lng
+                    }
+                },
                 locationBias: {
                     circle: {
                         center: { latitude: lat, longitude: lng },
@@ -87,6 +93,7 @@ Example Input: "Roofing/Guttering" -> Output: Roofing Contractor`;
 
         const data = await response.json();
         const places = data.places || [];
+        const routingSummaries = data.routingSummaries || [];
         if (places.length === 0) {
             return NextResponse.json({ providers: [] });
         }
@@ -104,10 +111,16 @@ Example Input: "Roofing/Guttering" -> Output: Roofing Contractor`;
         let aiResults: any[] = [];
         if (missingPlaces.length > 0) {
             const providersContext = missingPlaces.map((place: any) => {
-                const reviews = place.reviews?.map((r: any) => r.text?.text).filter(Boolean).slice(0, 3) || [];
+                const reviews = place.reviews?.map((r: any) => ({
+                    text: r.text?.text,
+                    rating: r.rating
+                })).filter((r: any) => r.text).slice(0, 5) || [];
+                
                 return {
                     place_id: place.id,
                     name: place.displayName?.text || "Unknown",
+                    rating: place.rating,
+                    rating_count: place.userRatingCount,
                     description: place.editorialSummary?.text || "N/A",
                     reviews: reviews
                 };
@@ -117,13 +130,30 @@ Example Input: "Roofing/Guttering" -> Output: Roofing Contractor`;
 Analyse the following list of ${providersContext.length} home service providers.
 For each provider, perform the following tasks:
 1. Format the company name in Title Case (e.g. "Kin Electrical" instead of "kin electrical"). Keep acronyms like "DNSD" capitalised.
-2. Provide a single, punchy, engaging summary sentence (max 20 words) focusing on their strengths. CRITICAL: DO NOT include the company name in the summary.
-3. List exactly 3 specific service categories/specialities they offer (e.g. "Boiler Repair").
+2. Provide a "Customer Summary" (max 30 words). 
+   - This must be a balanced, honest overview of their reputation based on the individual reviews provided.
+   - Mention both positives and negatives if they appear in the reviews.
+   - CRITICAL: Weight the proportion of positive vs negative sentiment in your summary to accurately reflect the provided data. If most reviews are positive but there are common complaints, ensure those complaints are mentioned proportionally.
+   - NEVER mention the numeric rating or "stars" in this text. Focus entirely on the feedback content.
+   - DO NOT include the company name in the summary.
+3. List exactly 5 specific service categories/specialities they offer (e.g. "Boiler Repair").
+
+CRITICAL SERVICE RULES (for the "short" field):
+- Service names MUST NOT exceed 15 characters in length.
+- Use 1-2 word descriptions that are punchy and professional.
+- If a word is too long to fit the 15-character limit, shorten it and append a full stop (e.g., "Maint.", "Install.", "Rep.", "Cert.").
+- Ensure services are highly relevant to the trade: ${trade}.
+- Aim for high quality and clarity while staying strictly within the 15-character limit.
+
+FORMAT FOR SERVICES:
+Provide an object for each service with two fields:
+- "short": The shortened name (max 15 chars, professional shortening).
+- "full": The full, descriptive name of the service (max 30 chars).
 
 CRITICAL: 
 - Use British English.
 - Output raw JSON ONLY. 
-- FORMAT: {"results": [{"place_id": "...", "name": "...", "summary": "...", "services": ["...", "...", "..."]}, ...]}
+- FORMAT: {"results": [{"place_id": "...", "name": "...", "summary": "...", "services": [{"short": "...", "full": "..."}, ...]}, ...]}
 
 DATA:
 ${JSON.stringify(providersContext, null, 2)}`;
@@ -143,7 +173,7 @@ ${JSON.stringify(providersContext, null, 2)}`;
 
         // 4. Map results back and identify new data to cache
         const toCache: any[] = [];
-        const processedProviders = places.map((place: any) => {
+        const processedProviders = places.map((place: any, index: number) => {
             const isCached = cachedMap.has(place.id);
             const aiData = isCached 
                 ? cachedMap.get(place.id) 
@@ -167,6 +197,13 @@ ${JSON.stringify(providersContext, null, 2)}`;
                 county
             ].filter(Boolean).join(", ");
 
+            // Extract driving distance from routingSummaries (parallel array to places)
+            let distanceText = "";
+            const meters = routingSummaries[index]?.legs?.[0]?.distanceMeters;
+            if (meters !== undefined) {
+                distanceText = (meters / 1000).toFixed(1);
+            }
+
             const providerData = {
                 place_id: place.id,
                 name: aiData?.name || place.displayName?.text || "Unknown Provider",
@@ -178,7 +215,8 @@ ${JSON.stringify(providersContext, null, 2)}`;
                 latitude: place.location?.latitude,
                 longitude: place.location?.longitude,
                 summary: aiData?.summary || place.editorialSummary?.text || `Local ${trade} professional.`,
-                services: aiData?.services || (place.types?.filter((t: string) => !["point_of_interest", "establishment", "premise", "map"].includes(t)).slice(0, 3) || [])
+                services: aiData?.services || (place.types?.filter((t: string) => !["point_of_interest", "establishment", "premise", "map"].includes(t)).slice(0, 5).map((t: string) => ({ short: t.slice(0, 15), full: t })) || []),
+                distanceText: distanceText
             };
 
             // Add to batch cache update if it's new and we have AI data for it
@@ -188,6 +226,7 @@ ${JSON.stringify(providersContext, null, 2)}`;
 
             return {
                 ...providerData,
+                distanceText, // Add driving distance to the final response
                 ratingCount: providerData.rating_count // Keep frontend compatibility
             };
         });

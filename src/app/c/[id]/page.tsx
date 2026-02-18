@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getImageData, clearImageData } from "@/lib/image-store";
 import { cn } from "@/lib/utils";
@@ -63,6 +63,12 @@ interface Message {
     content: string;
     feedback?: "up" | "down" | null;
     attachments?: string[];
+    hasUpdatedDiagnosis?: boolean;
+}
+
+interface Service {
+    short: string;
+    full: string;
 }
 
 interface Provider {
@@ -75,7 +81,8 @@ interface Provider {
     latitude?: number;
     longitude?: number;
     summary: string;
-    services: string[];
+    services: Service[];
+    distanceText?: string;
 }
 
 // --- Main Component ---
@@ -105,6 +112,7 @@ export default function Results() {
     // --- Refs ---
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const diagnosisRef = useRef<HTMLDivElement>(null);
 
     // Log state changes for debugging
     useEffect(() => {
@@ -156,6 +164,7 @@ export default function Results() {
             if (conv) {
                 if (conv.image_url) setImageSrc(conv.image_url);
                 if (conv.diagnosis_json) setDiagnosis(conv.diagnosis_json);
+                if (conv.providers_json) setProviders(conv.providers_json);
                 if (conv.user_lat && conv.user_lng) {
                     setUserLocation({ 
                         lat: conv.user_lat, 
@@ -170,7 +179,8 @@ export default function Results() {
                     role: m.role as "user" | "assistant",
                     content: m.content,
                     attachments: m.attachments,
-                    feedback: m.feedback as "up" | "down" | null
+                    feedback: m.feedback as "up" | "down" | null,
+                    hasUpdatedDiagnosis: m.has_updated_diagnosis
                 }));
                 setMessages(mappedMsgs);
                 return mappedMsgs;
@@ -186,24 +196,29 @@ export default function Results() {
     /**
      * Saves a new message to Supabase.
      */
-    const saveMessage = async (role: "user" | "assistant", content: string, attachments: string[] = []) => {
+    const saveMessage = async (role: "user" | "assistant", content: string, attachments: string[] = [], hasUpdatedDiagnosis: boolean = false) => {
         if (!id) return;
         const { error } = await (supabase as any).from('messages').insert({
             conversation_id: id,
             role,
             content,
-            attachments
+            attachments,
+            has_updated_diagnosis: hasUpdatedDiagnosis
         });
         if (error) console.error("Error saving message:", error);
     };
 
-    const saveConversation = async (diag?: DiagnosisData) => {
+    const saveConversation = async (overrides?: { 
+        diag?: DiagnosisData, 
+        loc?: { lat: number; lng: number; address: string },
+        provs?: Provider[] 
+    }) => {
         if (!id) return;
         
         const deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
-        
-        // Ensure we're saving the full diagnosis object
-        const finalDiagnosis = diag || diagnosis;
+        const finalDiagnosis = overrides?.diag || diagnosis;
+        const finalLocation = overrides?.loc || userLocation;
+        const finalProviders = overrides?.provs || providers;
         
         console.log("Saving conversation metadata:", { id, diagnosisTitle: finalDiagnosis?.diagnosis });
 
@@ -211,10 +226,11 @@ export default function Results() {
             id,
             title: finalDiagnosis?.diagnosis || "New Diagnosis",
             image_url: imageSrc,
-            user_lat: userLocation?.lat,
-            user_lng: userLocation?.lng,
-            user_address: userLocation?.address,
+            user_lat: finalLocation?.lat,
+            user_lng: finalLocation?.lng,
+            user_address: finalLocation?.address,
             diagnosis_json: finalDiagnosis,
+            providers_json: finalProviders,
             device_type: deviceType,
             user_agent: navigator.userAgent,
             updated_at: new Date().toISOString()
@@ -231,6 +247,10 @@ export default function Results() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, []);
 
+    const scrollToDiagnosis = useCallback(() => {
+        diagnosisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, []);
+
     useEffect(() => {
         scrollToBottom();
     }, [messages, scrollToBottom]);
@@ -243,7 +263,7 @@ export default function Results() {
      * @param lng - Longitude
      * @param tradeToSearch - The specific trade (e.g. "Plumber") to search for.
      */
-    const fetchProviders = async (lat: number, lng: number, tradeToSearch?: string) => {
+    const fetchProviders = useCallback(async (lat: number, lng: number, tradeToSearch?: string) => {
         const trade = tradeToSearch || diagnosis?.trade;
         if (!trade) return;
         
@@ -257,6 +277,7 @@ export default function Results() {
             const data = await res.json();
             if (res.ok && data.providers) {
                 setProviders(data.providers);
+                saveConversation({ provs: data.providers });
             } else {
                 console.error("API Error:", data.error || "Unknown error");
             }
@@ -265,13 +286,13 @@ export default function Results() {
         } finally {
             setIsLoadingProviders(false);
         }
-    };
+    }, [diagnosis?.trade]);
 
     /**
      * Gets the user's current geolocation and triggers provider search.
      * @param tradeToSearch - Optional trade to override current diagnosis trade.
      */
-    const getCurrentLocation = (tradeToSearch?: string) => {
+    const getCurrentLocation = useCallback((tradeToSearch?: string) => {
         navigator.geolocation.getCurrentPosition(
             async (pos) => {
                 const { latitude: lat, longitude: lng } = pos.coords;
@@ -288,7 +309,9 @@ export default function Results() {
                 try {
                     const [geoData] = await Promise.all([geocodePromise, providersPromise]);
                     const address = geoData.address || "Current Location";
-                    setUserLocation({ lat, lng, address });
+                    const loc = { lat, lng, address };
+                    setUserLocation(loc);
+                    saveConversation({ loc });
                 } catch (e) {
                     console.error("Error in location-based fetching:", e);
                     setUserLocation({ lat, lng, address: "Current Location" });
@@ -299,7 +322,7 @@ export default function Results() {
                 toast.error("Location access denied");
             }
         );
-    };
+    }, [fetchProviders]);
 
     const startInitialDiagnosis = useCallback(async (img: string) => {
         if (diagnosisStartedRef.current) return;
@@ -352,25 +375,31 @@ export default function Results() {
                         // 1. Try tags first
                         const finalJsonMatch = fullText.match(/<json>([\s\S]*?)(?:<\/json>|$)/i);
                         if (finalJsonMatch) {
-                            processJson(finalJsonMatch[1], currentThinking, true);
+                            await processJson(finalJsonMatch[1], currentThinking, true);
                         } else {
                             // 2. Fallback: Try to find ANY JSON object in the text
                             const anyJsonMatch = fullText.match(/\{[\s\S]*\}/);
                             if (anyJsonMatch) {
                                 console.log("Found raw JSON fallback at end");
-                                processJson(anyJsonMatch[0], currentThinking, true);
+                                await processJson(anyJsonMatch[0], currentThinking, true);
                             }
                         }
                     }
                     break;
                 }
                 
-                // 1. Extract thinking
+                // 1. Extract thinking - refined to strictly exclude tags
                 const thoughtMatch = fullText.match(/<(?:thought|thought_process)>([\s\S]*?)(?:<\/(?:thought|thought_process)>|$)/i) 
                     || fullText.match(/```thought\s*([\s\S]*?)(?:```|$)/i);
                 
                 if (thoughtMatch) {
-                    currentThinking = thoughtMatch[1].trim();
+                    // Remove any internal tags if the AI accidentally nested them
+                    currentThinking = thoughtMatch[1]
+                        .replace(/<\/?(?:thought|thought_process)>/gi, "")
+                        .replace(/```thought/gi, "")
+                        .replace(/```/gi, "")
+                        .trim();
+                    
                     setDiagnosis(prev => ({
                         thinking: currentThinking,
                         diagnosis: prev?.diagnosis || "",
@@ -383,17 +412,17 @@ export default function Results() {
                 // 2. Extract JSON
                 const jsonMatch = fullText.match(/<json>([\s\S]*?)(?:<\/json>|$)/i);
                 if (jsonMatch) {
-                    processJson(jsonMatch[1], currentThinking, fullText.toLowerCase().includes("</json>"));
+                    await processJson(jsonMatch[1], currentThinking, fullText.toLowerCase().includes("</json>"));
                 } else {
                     // Try to find JSON even if tags are missing or wrapped in markdown
                     const anyJsonMatch = fullText.match(/\{[\s\S]*\}/);
                     if (anyJsonMatch) {
-                        processJson(anyJsonMatch[0], currentThinking, false);
+                        await processJson(anyJsonMatch[0], currentThinking, false);
                     }
                 }
             }
 
-            function processJson(jsonText: string, thinking: string, isComplete: boolean) {
+            async function processJson(jsonText: string, thinking: string, isComplete: boolean) {
                 // Clean up markdown artifacts and surrounding whitespace
                 let cleaned = jsonText.trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
                 
@@ -424,8 +453,8 @@ export default function Results() {
                         
                         if (isComplete) {
                             console.log("JSON complete, saving to Supabase...");
-                            saveConversation({ thinking, ...parsedJson });
-                            saveMessage("assistant", parsedJson.message || `I identified a ${parsedJson.diagnosis}.`);
+                            await saveConversation({ diag: { thinking, ...parsedJson } });
+                            saveMessage("assistant", parsedJson.message || `I identified a ${parsedJson.diagnosis}.`, [], false);
                         }
                     }
                 } catch (e) {
@@ -440,6 +469,16 @@ export default function Results() {
             console.log("Diagnosis process finished.");
         }
     }, [id, saveConversation, saveMessage, getCurrentLocation]);
+
+    /**
+     * Re-fetches providers if they are missing on page load/refresh.
+     */
+    useEffect(() => {
+        if (isLoaded && userLocation && diagnosis?.trade && providers.length === 0 && !isLoadingProviders) {
+            console.log("Auto-fetching providers for loaded conversation:", diagnosis.trade);
+            fetchProviders(userLocation.lat, userLocation.lng, diagnosis.trade);
+        }
+    }, [isLoaded, userLocation, diagnosis?.trade, providers.length, isLoadingProviders, fetchProviders]);
 
     /**
      * Initial data loading and image detection.
@@ -494,6 +533,7 @@ export default function Results() {
             attachments: userAttachments
         };
 
+        const previousDiagnosis = diagnosis;
         setMessages(prev => [...prev, newMessage]);
         setMessage("");
         setAttachments([]);
@@ -551,9 +591,16 @@ export default function Results() {
                 }
 
                 // 1. Extract thinking
-                const thoughtMatch = fullText.match(/<thought>([\s\S]*?)(?:\s*<\/thought>|$)/i);
+                const thoughtMatch = fullText.match(/<(?:thought|thought_process)>([\s\S]*?)(?:\s*<\/(?:thought|thought_process)>|$)/i)
+                    || fullText.match(/```thought\s*([\s\S]*?)(?:\s*```|$)/i);
+
                 if (thoughtMatch && thoughtMatch[1]) {
-                    currentThinking = thoughtMatch[1].trim();
+                    currentThinking = thoughtMatch[1]
+                        .replace(/<\/?(?:thought|thought_process)>/gi, "")
+                        .replace(/```thought/gi, "")
+                        .replace(/```/gi, "")
+                        .trim();
+                    
                     setDiagnosis(prev => prev ? { ...prev, thinking: currentThinking } : { 
                         thinking: currentThinking, 
                         diagnosis: "", 
@@ -579,16 +626,26 @@ export default function Results() {
                         if (parsedJson.diagnosis) {
                             const assistantContent = parsedJson.message || (parsedJson.diagnosis + "\n\n" + parsedJson.action_required);
                             
-                            // Update the chat bubble
+                            // Update the chat bubble with a robust comparison
+                            const clean = (s: string | undefined) => (s || "").trim().toLowerCase();
+                            const hasChanged = 
+                                clean(previousDiagnosis?.diagnosis) !== clean(parsedJson.diagnosis) ||
+                                clean(previousDiagnosis?.trade) !== clean(parsedJson.trade);
+
                             setMessages(prev => {
                                 const next = [...prev];
-                                next[next.length - 1] = { ...next[next.length - 1], content: assistantContent };
+                                next[next.length - 1] = { 
+                                    ...next[next.length - 1], 
+                                    content: assistantContent,
+                                    hasUpdatedDiagnosis: hasChanged
+                                };
                                 return next;
                             });
 
                             // Update main diagnosis state
                             const prevTrade = diagnosis?.trade;
-                            setDiagnosis({ thinking: currentThinking, ...parsedJson });
+                            const diag = { thinking: currentThinking, ...parsedJson };
+                            setDiagnosis(diag);
 
                             // Auto-trigger provider search
                             const userAskedForProviders = userMsg.toLowerCase().match(/provider|contact|who/);
@@ -598,7 +655,8 @@ export default function Results() {
 
                             // Save assistant message to DB
                             if (fullText.toLowerCase().includes("</json>")) {
-                                saveMessage("assistant", assistantContent);
+                                await saveConversation({ diag });
+                                saveMessage("assistant", assistantContent, [], hasChanged);
                             }
                         }
                     } catch (e) { /* partial */ }
@@ -625,7 +683,8 @@ export default function Results() {
                 const url = e.target?.result as string;
                 if (url) {
                     try {
-                        const compressed = await compressImage(url);
+                        // Compress additional attachments to ~50% the size of the main upload
+                        const compressed = await compressImage(url, 512, 0.7);
                         setAttachments(prev => [...prev, compressed].slice(0, 5));
                     } catch (err) {
                         console.error("Attachment compression failed:", err);
@@ -669,6 +728,7 @@ export default function Results() {
         
         if (!lastUserMsg) return;
 
+        const previousDiagnosis = diagnosis;
         setMessages(prev => prev.slice(0, index));
         setIsResponding(true);
 
@@ -714,9 +774,14 @@ export default function Results() {
 
                 if (done) break;
 
-                const thoughtMatch = fullText.match(/<thought>([\s\S]*?)(?:\s*<\/thought>|$)/i);
+                // 1. Extract thinking
+                const thoughtMatch = fullText.match(/<(?:thought|thought_process)>([\s\S]*?)(?:\s*<\/(?:thought|thought_process)>|$)/i);
                 if (thoughtMatch && thoughtMatch[1]) {
-                    currentThinking = thoughtMatch[1].trim();
+                    currentThinking = thoughtMatch[1]
+                        .replace(/<\/?(?:thought|thought_process)>/gi, "")
+                        .replace(/```thought/gi, "")
+                        .replace(/```/gi, "")
+                        .trim();
                     setDiagnosis(prev => prev ? { ...prev, thinking: currentThinking } : {
                         thinking: currentThinking,
                         diagnosis: "",
@@ -726,12 +791,14 @@ export default function Results() {
                     });
                 }
 
-                const jsonMatch = fullText.match(/<json>([\s\S]*?)(?:\s*<\/json>|$)/i);
+                // 2. Extract JSON
+                const jsonMatch = fullText.match(/<(?:json|diagnosis_data)>([\s\S]*?)(?:\s*<\/(?:json|diagnosis_data)>|$)/i);
                 if (jsonMatch) {
                     let cleaned = jsonMatch[1].trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
                     try {
                         let toParse = cleaned;
-                        if (!fullText.toLowerCase().includes("</json>") && !cleaned.endsWith("}")) {
+                        const isComplete = fullText.toLowerCase().includes("</json>") || fullText.toLowerCase().includes("</diagnosis_data>");
+                        if (!isComplete && !cleaned.endsWith("}")) {
                             const lastBrace = cleaned.lastIndexOf("}");
                             if (lastBrace !== -1) toParse = cleaned.substring(0, lastBrace + 1);
                         }
@@ -740,18 +807,33 @@ export default function Results() {
                         if (parsedJson.diagnosis) {
                             const assistantContent = parsedJson.message || (parsedJson.diagnosis + "\n\n" + parsedJson.action_required);
                             
+                            const clean = (s: string | undefined) => (s || "").trim().toLowerCase();
+                            const hasChanged = 
+                                clean(previousDiagnosis?.diagnosis) !== clean(parsedJson.diagnosis) ||
+                                clean(previousDiagnosis?.trade) !== clean(parsedJson.trade);
+
                             setMessages(prev => {
                                 const next = [...prev];
-                                next[next.length - 1] = { ...next[next.length - 1], content: assistantContent };
+                                next[next.length - 1] = { 
+                                    ...next[next.length - 1], 
+                                    content: assistantContent,
+                                    hasUpdatedDiagnosis: hasChanged
+                                };
                                 return next;
                             });
 
                             const prevTrade = diagnosis?.trade;
-                            setDiagnosis({ thinking: currentThinking, ...parsedJson });
+                            const diag = { thinking: currentThinking, ...parsedJson };
+                            setDiagnosis(diag);
 
                             const userAskedForProviders = lastUserMsg.content.toLowerCase().match(/provider|contact|who/);
                             if (parsedJson.trade && (parsedJson.trade !== prevTrade || providers.length === 0 || userAskedForProviders)) {
                                 getCurrentLocation(parsedJson.trade);
+                            }
+
+                            if (isComplete) {
+                                await saveConversation({ diag });
+                                saveMessage("assistant", assistantContent, [], hasChanged);
                             }
                         }
                     } catch (e) {}
@@ -799,9 +881,9 @@ export default function Results() {
                         <div className="flex flex-col gap-3 w-full">
                             
                             {/* Diagnosis Section: Image & Initial Analysis */}
-                            <div className="flex-shrink-0 w-full sm:w-1/2 md:w-2/5 relative">
+                            <div ref={diagnosisRef} className="flex-shrink-0 w-full sm:w-1/2 md:w-2/5 relative scroll-mt-20">
                                 <div className="rounded-lg overflow-hidden border border-border/50">
-                                    <img src={imageSrc} alt="Issue" className="w-full h-auto max-h-[50vh] object-cover" />
+                                    <img src={imageSrc} alt="Issue" className="w-full h-auto max-h-[60vh] object-cover" />
                                 </div>
                             </div>
 
@@ -811,13 +893,7 @@ export default function Results() {
 
                             <div className="mt-4 flex flex-col gap-2">
                                 {isDiagnosing || !diagnosis?.diagnosis ? (
-                                    hasStartedDiagnosis ? (
-                                        <DiagnosisSkeleton onRetry={handleRetryDiagnosis} />
-                                    ) : (
-                                        <div className="py-8 text-center text-muted-foreground">
-                                            Waiting to start diagnosis...
-                                        </div>
-                                    )
+                                    <DiagnosisSkeleton />
                                 ) : (
                                     <DiagnosisReport diagnosis={diagnosis} />
                                 )}
@@ -830,7 +906,7 @@ export default function Results() {
                                         <div className="flex flex-col gap-2">
                                             <h3 className="text-lg font-semibold flex items-center gap-2">Recommended Service Providers</h3>
                                             <p className="text-sm leading-relaxed text-muted-foreground">
-                                                I found these highly-rated {diagnosis?.trade || "service"} providers within 25km of your location.
+                                                I found these highly-rated {diagnosis?.trade && diagnosis.trade !== 'N/A' ? diagnosis.trade : "service"} providers within 25km of your location.
                                             </p>
                                         </div>
                                         
@@ -841,7 +917,7 @@ export default function Results() {
                                                 <div className="col-span-full py-12 text-center text-muted-foreground">No providers found in your area.</div>
                                             ) : (
                                                 providers.map((p, i) => (
-                                                    <ProviderCard key={i} provider={p} index={i} openPopoverId={openPopoverId} setOpenPopoverId={setOpenPopoverId} />
+                                                    <ProviderCard key={i} provider={p} index={i} openPopoverId={openPopoverId} setOpenPopoverId={setOpenPopoverId} trade={diagnosis?.trade} userLocation={userLocation} />
                                                 ))
                                             )}
                                         </div>
@@ -859,6 +935,7 @@ export default function Results() {
                                             onFeedback={(type) => handleMessageFeedback(i, type)}
                                             onCopy={() => handleCopy(msg.content)}
                                             onRegenerate={() => handleRegenerate(i)}
+                                            onScrollToDiagnosis={scrollToDiagnosis}
                                         />
                                     ))}
                                     <div ref={messagesEndRef} />
@@ -931,27 +1008,53 @@ function DiagnosisReport({ diagnosis }: { diagnosis: DiagnosisData | null }) {
  * Displays service badges in a single line with smart truncation.
  * Hides services that would be truncated by more than 25%.
  */
-function ServiceBadges({ services }: { services: string[] }) {
+function ServiceBadges({ services, trade }: { services: any[]; trade?: string }) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
-    const [visibleCount, setVisibleCount] = useState(services.length);
+
+    // Normalize services to handle legacy string data or missing properties
+    const normalizedServices = useMemo(() => {
+        return (services || []).map(s => {
+            if (typeof s === 'string') return { short: s.slice(0, 15), full: s };
+            return {
+                short: s?.short || s?.full?.slice(0, 15) || "Service",
+                full: s?.full || s?.short || "Service"
+            };
+        });
+    }, [services]);
+
+    const [visibleCount, setVisibleCount] = useState(normalizedServices.length);
+
+    // Filter/Sort services based on trade if provided
+    const sortedServices = useMemo(() => {
+        if (!trade) return normalizedServices;
+        const normalizedTrade = trade.toLowerCase();
+        return [...normalizedServices].sort((a, b) => {
+            const aMatch = a.full.toLowerCase().includes(normalizedTrade);
+            const bMatch = b.full.toLowerCase().includes(normalizedTrade);
+            if (aMatch && !bMatch) return -1;
+            if (!aMatch && bMatch) return 1;
+            return 0;
+        });
+    }, [normalizedServices, trade]);
 
     useEffect(() => {
         const calculateVisible = () => {
             if (!containerRef.current) return;
-            // The parent is the "flex flex-wrap gap-2" div, but we want the card's inner width
-            // Let's look up to the card content or header area
             const parent = containerRef.current.closest('.flex-col.gap-2');
             if (!parent) return;
             
             const style = window.getComputedStyle(parent);
-            const containerWidth = parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 4;
+            // Safety margin: 12px for padding and potential rounding errors
+            const containerWidth = parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 12;
             
             if (containerWidth <= 0) return;
 
-            const moreBadgeWidth = 40; 
-            let currentWidth = 0;
+            const moreBadgeWidth = 50; 
+            let currentLine = 1;
+            let currentLineWidth = 0;
             let count = 0;
+            const gap = 8;
 
             const measureSpan = document.createElement("span");
             measureSpan.style.visibility = "hidden";
@@ -960,22 +1063,21 @@ function ServiceBadges({ services }: { services: string[] }) {
             measureSpan.style.font = "600 12px sans-serif"; 
             document.body.appendChild(measureSpan);
 
-            for (let i = 0; i < services.length; i++) {
-                measureSpan.innerText = services[i];
+            for (let i = 0; i < sortedServices.length; i++) {
+                measureSpan.innerText = sortedServices[i].short;
                 const badgeWidth = measureSpan.offsetWidth + 16; 
-                const gap = 8;
+                const remainingItems = sortedServices.length - (i + 1);
 
-                const remainingItems = services.length - (i + 1);
-                let neededWidth = currentWidth + badgeWidth + (count > 0 ? gap : 0);
-                const finalWidthWithMore = neededWidth + (remainingItems > 0 ? gap + moreBadgeWidth : 0);
+                let potentialWidth = currentLineWidth + (currentLineWidth > 0 ? gap : 0) + badgeWidth;
+                const neededWithMore = potentialWidth + (remainingItems > 0 ? gap + moreBadgeWidth : 0);
 
-                if (finalWidthWithMore <= containerWidth) {
-                    currentWidth = neededWidth;
+                if (neededWithMore <= containerWidth) {
+                    currentLineWidth = potentialWidth;
                     count++;
                 } else {
-                    const availableForThis = containerWidth - currentWidth - (count > 0 ? gap : 0) - (remainingItems > 0 ? gap + moreBadgeWidth : 0);
-                    // 25% rule: if we can show 75% of it and it's at least 30px wide
-                    if (availableForThis >= badgeWidth * 0.75 && availableForThis > 30) {
+                    // Truncation check: Can we show at least 75% of this badge AND is it at least 40px?
+                    const availableWidth = containerWidth - currentLineWidth - (currentLineWidth > 0 ? gap : 0) - (remainingItems > 0 ? gap + moreBadgeWidth : 0);
+                    if (availableWidth >= badgeWidth * 0.75 && availableWidth > 40) {
                         count++;
                     }
                     break;
@@ -992,16 +1094,21 @@ function ServiceBadges({ services }: { services: string[] }) {
             clearTimeout(timer);
             window.removeEventListener("resize", calculateVisible);
         };
-    }, [services]);
+    }, [sortedServices, trade]);
 
-    const visibleServices = services.slice(0, visibleCount);
-    const hiddenServices = services.slice(visibleCount);
+    const visibleServices = sortedServices.slice(0, visibleCount);
+    const hiddenServices = sortedServices.slice(visibleCount);
 
     return (
         <div ref={containerRef} className="flex flex-row items-center gap-2 w-full min-w-0 overflow-hidden h-7 pr-1">
             {visibleServices.map((service, i) => (
-                <Badge key={i} variant="secondary" className="whitespace-nowrap truncate min-w-0 flex-shrink-1">
-                    {service}
+                <Badge 
+                    key={i} 
+                    variant="secondary" 
+                    className="whitespace-nowrap truncate min-w-0 flex-shrink-1 h-6 max-w-[150px]"
+                    title={service.full}
+                >
+                    {service.short}
                 </Badge>
             ))}
             {hiddenServices.length > 0 && (
@@ -1009,7 +1116,7 @@ function ServiceBadges({ services }: { services: string[] }) {
                     <PopoverTrigger asChild>
                         <Badge 
                             variant="outline" 
-                            className="cursor-pointer whitespace-nowrap transition-colors border-dotted border-2 flex-shrink-0"
+                            className="cursor-pointer whitespace-nowrap transition-colors border-dotted border-2 flex-shrink-0 h-6"
                             onMouseEnter={() => setOpen(true)}
                             onMouseLeave={() => setOpen(false)}
                         >
@@ -1024,11 +1131,11 @@ function ServiceBadges({ services }: { services: string[] }) {
                         onMouseLeave={() => setOpen(false)}
                     >
                         <div className="flex flex-col gap-2">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">All Services</p>
+                            <p className="text-xs font-semibold uppercase text-muted-foreground">All Services</p>
                             <div className="flex flex-wrap gap-1.5">
-                                {services.map((service, i) => (
+                                {sortedServices.map((service, i) => (
                                     <Badge key={i} variant="secondary">
-                                        {service}
+                                        {service.full}
                                     </Badge>
                                 ))}
                             </div>
@@ -1043,18 +1150,38 @@ function ServiceBadges({ services }: { services: string[] }) {
 /**
  * Individual provider card with contact, website, and directions.
  */
-function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId }: { 
-    provider: Provider, index: number, openPopoverId: string | null, setOpenPopoverId: (id: string | null) => void 
+function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId, trade, userLocation }: { 
+    provider: Provider, index: number, openPopoverId: string | null, setOpenPopoverId: (id: string | null) => void, trade?: string, userLocation?: { lat: number, lng: number } | null 
 }) {
     if (!provider) return null;
     const popoverId = `contact-${index}`;
     const displayName = provider.name.replace(/\band\b/gi, "&");
+
+    // Calculate distance if coordinates are available (fallback to Haversine if API driving distance missing)
+    const distance = useMemo(() => {
+        if (provider.distanceText) return provider.distanceText;
+        if (!userLocation || !provider.latitude || !provider.longitude) return null;
+        
+        const R = 6371; // Radius of the Earth in km
+        const dLat = (provider.latitude - userLocation.lat) * Math.PI / 180;
+        const dLon = (provider.longitude - userLocation.lng) * Math.PI / 180;
+        const a = 
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(userLocation.lat * Math.PI / 180) * Math.cos(provider.latitude * Math.PI / 180) * 
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const d = R * c;
+        return d.toFixed(1);
+    }, [userLocation, provider.latitude, provider.longitude]);
+
     return (
         <Card className="flex flex-col h-full border-input shadow-none p-4 rounded-lg">
             <CardHeader className="flex flex-col gap-3 p-0">
                 <div className="flex flex-col gap-2 w-full min-w-0">
                     <div className="flex justify-between items-center gap-2 w-full min-w-0">
-                        <CardTitle className="text-lg font-semibold truncate min-w-0" title={displayName}>{displayName}</CardTitle>
+                        <div className="min-w-0 flex-1">
+                            <CardTitle className="text-lg font-semibold truncate" title={displayName}>{displayName}</CardTitle>
+                        </div>
                         <div className="flex items-center gap-2 shrink-0">
                             <StarFill className="size-4 text-yellow-500 fill-yellow-500" />
                             <div className="flex items-center gap-1">
@@ -1064,11 +1191,14 @@ function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId }: {
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <ServiceBadges services={provider.services || []} />
+                        <ServiceBadges services={provider.services || []} trade={trade} />
                     </div>
                 </div>
             </CardHeader>
-            <p className="text-xs text-muted-foreground" title={provider.address}>{provider.address}</p>
+            <div className="flex items-center gap-1 w-full text-xs text-muted-foreground min-w-0">
+                <span className="truncate min-w-0" title={provider.address}>{provider.address}</span>
+                {distance && <span className="flex-none whitespace-nowrap"> • {distance} km</span>}
+            </div>
             <div className="flex flex-col gap-2">
                 <p className="text-sm font-medium">Customer Summary</p>
                 <blockquote className="border-l-2 border-input pl-3">
@@ -1103,19 +1233,19 @@ function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId }: {
 /**
  * A single chat message bubble (User or AI).
  */
-function ChatMessage({ message, isLast, isResponding, onFeedback, onCopy, onRegenerate }: { 
-    message: Message, isLast: boolean, isResponding: boolean, onFeedback: (type: "up" | "down") => void, onCopy: () => void, onRegenerate: () => void 
+function ChatMessage({ message, isLast, isResponding, onFeedback, onCopy, onRegenerate, onScrollToDiagnosis }: { 
+    message: Message, isLast: boolean, isResponding: boolean, onFeedback: (type: "up" | "down") => void, onCopy: () => void, onRegenerate: () => void, onScrollToDiagnosis: () => void 
 }) {
     return (
         <div className={cn("flex flex-col gap-2 w-full mt-6 animate-in fade-in slide-in-from-bottom-2 duration-300", message.role === "user" ? "items-end" : "items-start")}>
+            {message.attachments && message.attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-1">
+                    {message.attachments.map((src, i) => (
+                        <img key={i} src={src} alt="Attachment" className="h-40 w-auto rounded-md object-cover border border-border/50" />
+                    ))}
+                </div>
+            )}
             <div className={cn("text-sm leading-relaxed", message.role === "user" ? "bg-secondary text-secondary-foreground rounded-md px-3 py-1.5 max-w-[75%]" : "text-foreground w-full")}>
-                {message.attachments && message.attachments.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                        {message.attachments.map((src, i) => (
-                            <img key={i} src={src} alt="Attachment" className="h-32 w-auto rounded-md object-cover border border-border/50" />
-                        ))}
-                    </div>
-                )}
                 {message.content === "" && isLast && isResponding ? (
                     <div className="flex items-center py-1"><Spinner className="size-4 text-muted-foreground" /></div>
                 ) : (
@@ -1123,19 +1253,29 @@ function ChatMessage({ message, isLast, isResponding, onFeedback, onCopy, onRege
                 )}
             </div>
             {message.role === "assistant" && message.content !== "" && (
-                <div className="flex items-center gap-1 mt-1 -ml-2">
-                    <Button variant={message.feedback === "up" ? "secondary" : "ghost"} size="icon" className="size-8 group" onClick={() => onFeedback("up")}>
-                        <ThumbsUp className={cn("size-4 transition-colors", message.feedback === "up" ? "text-black dark:text-white" : "text-muted-foreground group-hover:text-black dark:group-hover:text-white")} />
-                    </Button>
-                    <Button variant={message.feedback === "down" ? "secondary" : "ghost"} size="icon" className="size-8 group" onClick={() => onFeedback("down")}>
-                        <ThumbsDown className={cn("size-4 transition-colors", message.feedback === "down" ? "text-black dark:text-white" : "text-muted-foreground group-hover:text-black dark:group-hover:text-white")} />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="size-8 group" onClick={onCopy}>
-                        <Copy className="size-4 text-muted-foreground transition-colors group-hover:text-black dark:group-hover:text-white" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="size-8 group" onClick={onRegenerate}>
-                        <RotateCcw className="size-4 text-muted-foreground transition-colors group-hover:text-black dark:group-hover:text-white" />
-                    </Button>
+                <div className="flex flex-col items-start gap-3 mt-1">
+                    {message.hasUpdatedDiagnosis && (
+                        <Button 
+                            variant="outline" 
+                            onClick={onScrollToDiagnosis}
+                        >
+                            View New Diagnosis
+                        </Button>
+                    )}
+                    <div className="flex items-center gap-1 -ml-2">
+                        <Button variant={message.feedback === "up" ? "secondary" : "ghost"} size="icon" className="size-8 group" onClick={() => onFeedback("up")}>
+                            <ThumbsUp className={cn("size-4 transition-colors", message.feedback === "up" ? "text-black dark:text-white" : "text-muted-foreground group-hover:text-black dark:group-hover:text-white")} />
+                        </Button>
+                        <Button variant={message.feedback === "down" ? "secondary" : "ghost"} size="icon" className="size-8 group" onClick={() => onFeedback("down")}>
+                            <ThumbsDown className={cn("size-4 transition-colors", message.feedback === "down" ? "text-black dark:text-white" : "text-muted-foreground group-hover:text-black dark:group-hover:text-white")} />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-8 group" onClick={onCopy}>
+                            <Copy className="size-4 text-muted-foreground transition-colors group-hover:text-black dark:group-hover:text-white" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-8 group" onClick={onRegenerate}>
+                            <RotateCcw className="size-4 text-muted-foreground transition-colors group-hover:text-black dark:group-hover:text-white" />
+                        </Button>
+                    </div>
                 </div>
             )}
         </div>
@@ -1184,12 +1324,13 @@ function ChatFooter({
                         <div>
                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => handleFilesChosen(e.target.files)} />
                             <Button 
-                                variant="secondary" 
+                                variant="ghost" 
                                 size="icon" 
+                                className="size-8 group"
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={isDisabled || attachments.length >= 5}
                             >
-                                <Paperclip className="size-5" />
+                                <Paperclip className="size-4 text-muted-foreground transition-colors group-hover:text-black dark:group-hover:text-white" />
                             </Button>
                         </div>
                         <Button 
@@ -1208,7 +1349,7 @@ function ChatFooter({
 /**
  * Skeleton loader for the diagnosis results.
  */
-function DiagnosisSkeleton({ onRetry }: { onRetry?: () => void }) {
+function DiagnosisSkeleton() {
     return (
         <div className="space-y-6">
             <div className="space-y-3">
@@ -1221,11 +1362,6 @@ function DiagnosisSkeleton({ onRetry }: { onRetry?: () => void }) {
                 <div className="space-y-2">
                     <Skeleton className="h-5 w-48 mb-2" /><Skeleton className="h-4 w-64" />
                 </div>
-                {onRetry && (
-                    <Button variant="outline" size="sm" onClick={onRetry} className="shrink-0">
-                        Retry Analysis
-                    </Button>
-                )}
             </div>
         </div>
     );
@@ -1243,9 +1379,10 @@ function ProvidersSkeleton() {
                         <div className="h-6 w-48 bg-secondary/50 rounded-md" />
                         <div className="h-6 w-16 bg-secondary/50 rounded-md" />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-row items-center gap-2 h-7 overflow-hidden">
                         <div className="h-5 w-20 bg-secondary/50 rounded-md" />
                         <div className="h-5 w-20 bg-secondary/50 rounded-md" />
+                        <div className="h-5 w-16 bg-secondary/50 rounded-md" />
                     </div>
                     <div className="h-4 w-full bg-secondary/50 rounded-md" />
                     <div className="mt-auto flex gap-2">

@@ -1,7 +1,7 @@
 /**
- * File: 01_tables.sql
+ * File: tables.sql
  * Description: Supabase schema definitions for provider caching and conversation tracking.
- * This file is idempotent and can be run multiple times.
+ * This file is idempotent and can be run multiple times to create OR update your database.
  */
 
 -- 1. Providers Cache
@@ -16,9 +16,12 @@ CREATE TABLE IF NOT EXISTS cached_providers (
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
     summary TEXT,
-    services TEXT[],
+    services JSONB,
     last_updated TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- IDEMPOTENT UPDATES: Ensure columns exist and have correct types
+ALTER TABLE cached_providers ALTER COLUMN services TYPE JSONB USING to_jsonb(services);
 
 -- 2. Conversations
 CREATE TABLE IF NOT EXISTS conversations (
@@ -28,13 +31,26 @@ CREATE TABLE IF NOT EXISTS conversations (
     user_lat DOUBLE PRECISION,
     user_lng DOUBLE PRECISION,
     user_address TEXT,
-    diagnosis_json JSONB,                -- Stores the structured diagnosis data
+    diagnosis_json JSONB,                
+    providers_json JSONB,
     device_type TEXT,
     user_agent TEXT,
     ip_hash TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- IDEMPOTENT UPDATES: Ensure all columns exist in case the table already existed
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title TEXT DEFAULT 'New Diagnosis';
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_lat DOUBLE PRECISION;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_lng DOUBLE PRECISION;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_address TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS diagnosis_json JSONB;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS providers_json JSONB;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS device_type TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_agent TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ip_hash TEXT;
 
 -- 3. Messages
 CREATE TABLE IF NOT EXISTS messages (
@@ -46,6 +62,11 @@ CREATE TABLE IF NOT EXISTS messages (
     feedback TEXT CHECK (feedback IN ('up', 'down')),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- IDEMPOTENT UPDATES: Ensure all columns exist for messages
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS feedback TEXT CHECK (feedback IN ('up', 'down'));
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments TEXT[];
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS has_updated_diagnosis BOOLEAN DEFAULT FALSE;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
