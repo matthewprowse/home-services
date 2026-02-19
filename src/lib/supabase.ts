@@ -7,13 +7,22 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 let supabaseInstance: any = null;
 
 export const getSupabase = () => {
+  if (typeof window === 'undefined') return dummyClient;
+  
   if (!supabaseInstance) {
     if (!supabaseUrl || !supabaseAnonKey) {
       console.warn("Supabase environment variables are missing. Client will not be initialized.");
       return dummyClient;
     }
 
-    supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey)
+    supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        flowType: 'pkce',
+        detectSessionInUrl: true,
+        persistSession: true,
+        autoRefreshToken: true
+      }
+    })
   }
   return supabaseInstance;
 }

@@ -55,7 +55,10 @@ export async function middleware(request: NextRequest) {
       }
     )
 
-    await supabase.auth.getUser()
+    // Only check for user session if NOT on auth routes to avoid interfering with magic link redirects
+    if (request.nextUrl.pathname !== '/auth/callback' && !request.nextUrl.pathname.startsWith('/auth/')) {
+      await supabase.auth.getUser()
+    }
   } catch (e) {
     console.error("Middleware Supabase error:", e)
   }

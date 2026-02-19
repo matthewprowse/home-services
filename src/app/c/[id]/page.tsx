@@ -971,16 +971,16 @@ export default function Results() {
 function AppHeader({ diagnosis, router }: { diagnosis: DiagnosisData | null, router: any }) {
     return (
         <header className="sticky top-0 z-50 bg-background">
-            <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
-                <h1 className="text-lg font-semibold truncate flex-1 min-w-0">{diagnosis?.diagnosis || "Conversation"}</h1>
+            <div className="mx-auto px-4 md:px-12 py-4 flex items-center justify-between gap-4">
+                <h1 className="text-lg font-semibold truncate flex-1 min-w-0">{diagnosis?.diagnosis || "Conversation Name"}</h1>
                 <Popover>
                     <PopoverTrigger asChild>
                         <button className="size-8 rounded-full bg-secondary cursor-pointer hover:bg-secondary/80 transition-colors" />
                     </PopoverTrigger>
-                    <PopoverContent className="w-36 p-3" align="end">
-                        <div className="flex flex-col">
-                            <Button variant="ghost" className="justify-start font-normal h-9 px-3" onClick={() => router.push("/settings")}>Settings</Button>
-                            <Button variant="ghost" className="justify-start font-normal h-9 px-3 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" onClick={() => console.log("Logout clicked")}>Log out</Button>
+                    <PopoverContent className="w-48 p-3" align="end">
+                        <div className="flex flex-col gap-2">
+                            <Button variant="ghost" className="justify-start font-normal" onClick={() => router.push("/settings")}>Settings</Button>
+                            <Button variant="ghost" className="justify-start font-normal" onClick={() => console.log("Logout clicked")}>Log Out</Button>
                         </div>
                     </PopoverContent>
                 </Popover>
@@ -1231,7 +1231,7 @@ function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId, trade,
                     </p>
                 </blockquote>
             </div>
-            <div className="flex flex-row gap-2 mt-auto">
+            <div className="flex flex-wrap gap-2 mt-auto">
                 <Popover open={openPopoverId === popoverId} onOpenChange={(open) => setOpenPopoverId(open ? popoverId : null)}>
                     <PopoverTrigger asChild>
                         <Button variant="default" className="flex-1">Contact</Button>
@@ -1247,7 +1247,7 @@ function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId, trade,
 
                             {provider.phone && (
                                 <Button variant="ghost" className="justify-start w-full" asChild>
-                                    <a href={`tel:${provider.phone}`} className="flex items-center justify-between w-full">Immediate Assistance</a></Button>
+                                    <a href={`tel:${provider.phone}`} className="flex items-center justify-between w-full mb-1">Immediate Assistance</a></Button>
                             )}
                             <Button variant="ghost" className="justify-start" onClick={() => window.open(`mailto:info@${provider.name.toLowerCase().replace(/\s+/g, "")}.com`)}>Request Quote</Button>
                         </div>

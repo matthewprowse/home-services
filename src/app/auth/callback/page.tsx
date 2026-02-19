@@ -38,7 +38,16 @@ function AuthCallbackContent() {
                 // 1. Check for PKCE code
                 if (code) {
                     const { error: exchangeError } = await client.auth.exchangeCodeForSession(code);
-                    if (exchangeError) throw exchangeError;
+                    if (exchangeError) {
+                        // If PKCE fails, see if we already have a session as a fallback
+                        const { data: { session: fallbackSession } } = await client.auth.getSession();
+                        if (fallbackSession) {
+                            toast.success("Successfully signed in!");
+                            router.push(next);
+                            return;
+                        }
+                        throw exchangeError;
+                    }
                     
                     toast.success("Successfully signed in!");
                     router.push(next);
