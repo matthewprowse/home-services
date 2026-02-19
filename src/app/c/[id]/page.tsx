@@ -1113,7 +1113,7 @@ function ServiceBadges({ services, trade, isOpen }: { services: any[]; trade?: s
     }, [sortedServices, trade]);
 
     const visibleServices = sortedServices.slice(0, visibleCount);
-    const hiddenServices = sortedServices.slice(visibleCount);
+    const hiddenServices = sortedServices.slice(visibleCount).filter(s => !s.isStatus);
 
     return (
         <div ref={containerRef} className="flex flex-row items-center gap-2 w-full min-w-0 overflow-hidden h-7 pr-1">
@@ -1121,10 +1121,7 @@ function ServiceBadges({ services, trade, isOpen }: { services: any[]; trade?: s
                 <Badge 
                     key={i} 
                     variant={service.isStatus ? "default" : "secondary"} 
-                    className={cn(
-                        "whitespace-nowrap truncate min-w-0 flex-shrink-1 h-6 max-w-[150px]",
-                        service.isStatus && (service.short === "Open" ? "bg-emerald-500 hover:bg-emerald-600 text-white border-none" : "bg-red-500 hover:bg-red-600 text-white border-none")
-                    )}
+                    className="whitespace-nowrap truncate min-w-0 flex-shrink-1 h-6 max-w-[150px] font-medium"
                     title={service.full}
                 >
                     {service.short}
@@ -1152,7 +1149,7 @@ function ServiceBadges({ services, trade, isOpen }: { services: any[]; trade?: s
                         <div className="flex flex-col gap-2">
                             <p className="text-xs font-semibold uppercase text-muted-foreground">All Services</p>
                             <div className="flex flex-wrap gap-1.5">
-                                {sortedServices.map((service, i) => (
+                                {sortedServices.filter(s => !s.isStatus).map((service, i) => (
                                     <Badge key={i} variant="secondary">
                                         {service.full}
                                     </Badge>

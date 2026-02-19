@@ -8,7 +8,14 @@ let supabaseInstance: ReturnType<typeof createClient> | null = null;
 
 export const getSupabase = () => {
   if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey)
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce'
+      }
+    })
   }
   return supabaseInstance;
 }

@@ -35,28 +35,11 @@ export default function AuthPage() {
         } catch (error: any) {
             console.error("Auth error:", error);
             if (error.message?.toLowerCase().includes("rate limit")) {
-                toast.error("Email limit reached. Please try again in an hour or use Google to sign in immediately.");
+                toast.error("Email limit reached. Please try again in an hour.");
             } else {
                 toast.error(error.message || "Failed to send magic link");
             }
         } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleGoogleLogin = async () => {
-        setIsLoading(true);
-        try {
-            const { error } = await supabase.auth.signInWithOAuth({
-                provider: "google",
-                options: {
-                    redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-                },
-            });
-            if (error) throw error;
-        } catch (error: any) {
-            console.error("Google auth error:", error);
-            toast.error(error.message || "Failed to connect to Google");
             setIsLoading(false);
         }
     };
@@ -90,32 +73,16 @@ export default function AuthPage() {
                             </Button>
                         </form>
                     ) : (
-                        <div className="text-center py-4 space-y-2">
-                            <p className="text-sm font-medium">Check your inbox</p>
+                        <div className="text-center pb-4 space-y-2">
                             <p className="text-xs text-muted-foreground">
                                 We sent a magic link to <span className="text-foreground font-medium">{email}</span>. 
                                 Click the link in the email to sign in.
                             </p>
-                            <Button variant="ghost" className="text-xs" onClick={() => setIsEmailSent(false)}>
-                                Use a different email
+                            <Button variant="secondary" onClick={() => setIsEmailSent(false)}>
+                                Change Email Address
                             </Button>
                         </div>
                     )}
-
-                    <div className="relative">
-                        <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-input" />
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-background px-2 text-muted-foreground">
-                                Or continue with
-                            </span>
-                        </div>
-                    </div>
-
-                    <Button variant="outline" className="w-full border-input" onClick={handleGoogleLogin} disabled={isLoading}>
-                        Continue with Google
-                    </Button>
                 </CardContent>
                 <CardFooter className="text-center">
                     <p className="w-full text-xs text-muted-foreground">
