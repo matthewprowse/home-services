@@ -971,8 +971,8 @@ export default function Results() {
 function AppHeader({ diagnosis, router }: { diagnosis: DiagnosisData | null, router: any }) {
     return (
         <header className="sticky top-0 z-50 bg-background">
-            <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-                <h1 className="text-lg font-semibold">{diagnosis?.diagnosis || "Conversation"}</h1>
+            <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+                <h1 className="text-lg font-semibold truncate flex-1 min-w-0">{diagnosis?.diagnosis || "Conversation"}</h1>
                 <Popover>
                     <PopoverTrigger asChild>
                         <button className="size-8 rounded-full bg-secondary cursor-pointer hover:bg-secondary/80 transition-colors" />
