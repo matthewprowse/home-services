@@ -1237,11 +1237,27 @@ function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId, trade,
                     <PopoverContent className="w-48 p-2 rounded-md shadow-xl border-input" align="start" side="top">
                         <div className="flex flex-col gap-1">
                             {provider.phone && (
-                                <Button variant="ghost" className="justify-start h-10 font-medium" asChild><a href={`tel:${provider.phone}`}>Call</a></Button>
+                                <Button variant="ghost" className="justify-start w-full" asChild>
+                                    <a href={`tel:${provider.phone}`} className="flex items-center justify-between w-full">
+                                        Phone
+                                        <Badge variant="secondary" className="ml-auto bg-primary/10 text-primary border-none text-[10px] py-0 px-1.5 h-4.5 font-semibold">Immediate Help</Badge>
+                                    </a>
+                                </Button>
                             )}
-                            <Button variant="ghost" className="justify-start h-10 font-medium" onClick={() => window.open(`mailto:info@${provider.name.toLowerCase().replace(/\s+/g, "")}.com`)}>Email</Button>
+                            <Button variant="ghost" className="justify-start" onClick={() => window.open(`mailto:info@${provider.name.toLowerCase().replace(/\s+/g, "")}.com`)}>Email Address</Button>
                         </div>
                     </PopoverContent>
+
+                    {/*
+                    <PopoverContent className="w-48 p-2 rounded-md shadow-xl border-input" align="start" side="top">
+                        <div className="flex flex-col gap-1">
+                            {provider.phone && (
+                                <Button variant="ghost" className="justify-start" asChild><a href={`tel:${provider.phone}`}>Call</a></Button>
+                            )}
+                            <Button variant="ghost" className="justify-start" onClick={() => window.open(`mailto:info@${provider.name.toLowerCase().replace(/\s+/g, "")}.com`)}>Email</Button>
+                        </div>
+                    </PopoverContent>
+                    */}
                 </Popover>
                 {provider.website && (
                     <Button variant="secondary" className="flex-1" onClick={() => window.open(provider.website, "_blank")}>Website</Button>
