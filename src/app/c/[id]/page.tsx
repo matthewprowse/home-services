@@ -83,6 +83,7 @@ interface Provider {
     summary: string;
     services: Service[];
     distanceText?: string;
+    isOpen?: boolean | null;
 }
 
 // --- Main Component ---
@@ -1008,28 +1009,43 @@ function DiagnosisReport({ diagnosis }: { diagnosis: DiagnosisData | null }) {
  * Displays service badges in a single line with smart truncation.
  * Hides services that would be truncated by more than 25%.
  */
-function ServiceBadges({ services, trade }: { services: any[]; trade?: string }) {
+function ServiceBadges({ services, trade, isOpen }: { services: any[]; trade?: string; isOpen?: boolean | null }) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Normalize services to handle legacy string data or missing properties
     const normalizedServices = useMemo(() => {
-        return (services || []).map(s => {
+        const base = (services || []).map(s => {
             if (typeof s === 'string') return { short: s.slice(0, 15), full: s };
             return {
                 short: s?.short || s?.full?.slice(0, 15) || "Service",
                 full: s?.full || s?.short || "Service"
             };
         });
-    }, [services]);
+
+        if (isOpen !== undefined && isOpen !== null) {
+            base.unshift({
+                short: isOpen ? "Open" : "Closed",
+                full: isOpen ? "Currently Open" : "Currently Closed",
+                isStatus: true
+            });
+        }
+        return base;
+    }, [services, isOpen]);
 
     const [visibleCount, setVisibleCount] = useState(normalizedServices.length);
 
     // Filter/Sort services based on trade if provided
     const sortedServices = useMemo(() => {
-        if (!trade) return normalizedServices;
+        let base = [...normalizedServices];
+        if (!trade) return base;
         const normalizedTrade = trade.toLowerCase();
-        return [...normalizedServices].sort((a, b) => {
+        
+        return base.sort((a, b) => {
+            // Always keep status at the front
+            if (a.isStatus && !b.isStatus) return -1;
+            if (!a.isStatus && b.isStatus) return 1;
+            
             const aMatch = a.full.toLowerCase().includes(normalizedTrade);
             const bMatch = b.full.toLowerCase().includes(normalizedTrade);
             if (aMatch && !bMatch) return -1;
@@ -1104,8 +1120,11 @@ function ServiceBadges({ services, trade }: { services: any[]; trade?: string })
             {visibleServices.map((service, i) => (
                 <Badge 
                     key={i} 
-                    variant="secondary" 
-                    className="whitespace-nowrap truncate min-w-0 flex-shrink-1 h-6 max-w-[150px]"
+                    variant={service.isStatus ? "default" : "secondary"} 
+                    className={cn(
+                        "whitespace-nowrap truncate min-w-0 flex-shrink-1 h-6 max-w-[150px]",
+                        service.isStatus && (service.short === "Open" ? "bg-emerald-500 hover:bg-emerald-600 text-white border-none" : "bg-red-500 hover:bg-red-600 text-white border-none")
+                    )}
                     title={service.full}
                 >
                     {service.short}
@@ -1191,7 +1210,7 @@ function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId, trade,
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <ServiceBadges services={provider.services || []} trade={trade} />
+                        <ServiceBadges services={provider.services || []} trade={trade} isOpen={provider.isOpen} />
                     </div>
                 </div>
             </CardHeader>

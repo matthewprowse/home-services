@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
     try {
         const { lat, lng, trade, radius: customRadius } = await req.json();
-        const supabase = createServerClient();
+        const supabase = await createSupabaseServerClient();
 
         if (!lat || !lng || !trade) {
             return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
@@ -20,9 +20,11 @@ export async function POST(req: NextRequest) {
         }
         
         if (!apiKey) {
-            console.error("GOOGLE_PLACES_API_KEY is missing");
-            throw new Error("Google Places API key is not configured");
+            console.error("GOOGLE_PLACES_API_KEY is missing from environment variables");
+            return NextResponse.json({ error: "Google Places API key is not configured" }, { status: 500 });
         }
+
+        console.log(`Using API Key starting with: ${apiKey.substring(0, 6)}... (Length: ${apiKey.length})`);
 
         const radius = customRadius || 25000; // Default 25km
 
@@ -65,8 +67,8 @@ Example Input: "Roofing/Guttering" -> Output: Roofing Contractor`;
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "X-Goog-Api-Key": apiKey || "",
-                "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.types,places.reviews,routingSummaries"
+                "X-Goog-Api-Key": apiKey,
+                "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.location,places.editorialSummary,places.types,places.reviews,routingSummaries,places.regularOpeningHours"
             },
             body: JSON.stringify({
                 textQuery: searchQuery,
@@ -88,6 +90,7 @@ Example Input: "Roofing/Guttering" -> Output: Roofing Contractor`;
 
         if (!response.ok) {
             const errorText = await response.text();
+            console.error(`Google Places API Error Details: ${errorText}`);
             throw new Error(`Google Places API error (${response.status}): ${errorText}`);
         }
 
@@ -100,10 +103,14 @@ Example Input: "Roofing/Guttering" -> Output: Roofing Contractor`;
 
         // 3. Caching Logic: Check which providers are already analyzed
         const placeIds = places.map((p: any) => p.id);
-        const { data: cachedData } = await supabase
-            .from('cached_providers')
-            .select('*')
-            .in('place_id', placeIds);
+        let cachedData = [];
+        if (supabase) {
+            const { data } = await supabase
+                .from('cached_providers')
+                .select('*')
+                .in('place_id', placeIds);
+            cachedData = data || [];
+        }
 
         const cachedMap = new Map(cachedData?.map(item => [item.place_id, item]));
         const missingPlaces = places.filter((p: any) => !cachedMap.has(p.id));
@@ -214,6 +221,7 @@ ${JSON.stringify(providersContext, null, 2)}`;
                 website: place.websiteUri,
                 latitude: place.location?.latitude,
                 longitude: place.location?.longitude,
+                isOpen: place.regularOpeningHours?.openNow ?? null,
                 summary: aiData?.summary || place.editorialSummary?.text || `Local ${trade} professional.`,
                 services: aiData?.services || (place.types?.filter((t: string) => !["point_of_interest", "establishment", "premise", "map"].includes(t)).slice(0, 5).map((t: string) => ({ short: t.slice(0, 15), full: t })) || []),
                 distanceText: distanceText
@@ -227,12 +235,13 @@ ${JSON.stringify(providersContext, null, 2)}`;
             return {
                 ...providerData,
                 distanceText, // Add driving distance to the final response
-                ratingCount: providerData.rating_count // Keep frontend compatibility
+                ratingCount: providerData.rating_count, // Keep frontend compatibility
+                isOpen: providerData.isOpen
             };
         });
 
         // Batch update the cache in the background (don't await it to keep response fast)
-        if (toCache.length > 0) {
+        if (toCache.length > 0 && supabase) {
             supabase.from('cached_providers').upsert(toCache).then(({ error }) => {
                 if (error) console.error("Background cache update failed:", error);
             });
