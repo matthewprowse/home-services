@@ -1,18 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, getSupabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
-export default function AuthCallbackPage() {
+export const dynamic = 'force-dynamic';
+
+function AuthCallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [status, setStatus] = useState("Verifying your session...");
 
     useEffect(() => {
         const handleCallback = async () => {
+            const client = getSupabase();
+            if (!client) {
+                console.error("Supabase client not initialized");
+                router.push("/auth/error");
+                return;
+            }
+
             const code = searchParams.get("code");
             const next = searchParams.get("next") || "/";
             const error = searchParams.get("error");
@@ -28,7 +37,7 @@ export default function AuthCallbackPage() {
             try {
                 // 1. Check for PKCE code
                 if (code) {
-                    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+                    const { error: exchangeError } = await client.auth.exchangeCodeForSession(code);
                     if (exchangeError) throw exchangeError;
                     
                     toast.success("Successfully signed in!");
@@ -37,7 +46,7 @@ export default function AuthCallbackPage() {
                 }
 
                 // 2. Check for existing session (Implicit Flow hash parsing happens automatically)
-                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                const { data: { session }, error: sessionError } = await client.auth.getSession();
                 
                 if (sessionError) throw sessionError;
 
@@ -52,7 +61,7 @@ export default function AuthCallbackPage() {
                     setStatus("Completing sign in...");
                     // Small delay to let Supabase parse the hash
                     setTimeout(async () => {
-                        const { data: { session: retrySession } } = await supabase.auth.getSession();
+                        const { data: { session: retrySession } } = await client.auth.getSession();
                         if (retrySession) {
                             toast.success("Successfully signed in!");
                             router.push(next);
@@ -92,5 +101,27 @@ export default function AuthCallbackPage() {
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+export default function AuthCallbackPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex min-h-screen items-center justify-center p-4 bg-background">
+                <Card className="w-full max-w-md border-input shadow-none text-center">
+                    <CardHeader>
+                        <CardTitle className="text-2xl font-bold tracking-tight">Authenticating</CardTitle>
+                        <CardDescription>
+                            Preparing to verify session...
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex justify-center py-8">
+                        <div className="size-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    </CardContent>
+                </Card>
+            </div>
+        }>
+            <AuthCallbackContent />
+        </Suspense>
     );
 }
