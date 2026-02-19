@@ -35,12 +35,12 @@ export default function Home() {
                 setImageData(conversationId, compressedBase64, file.name);
                 
                 // Navigate to dynamic results page
-                router.push(`/c/${conversationId}`);
+                router.push(`/chat?id=${conversationId}`);
             } catch (err) {
                 console.error("Processing failed:", err);
                 const conversationId = Date.now().toString(36);
                 setImageData(conversationId, base64String, file.name);
-                router.push(`/c/${conversationId}`);
+                router.push(`/chat?id=${conversationId}`);
             }
         };
         reader.readAsDataURL(file);

@@ -6,8 +6,8 @@
 
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { getImageData, clearImageData } from "@/lib/image-store";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -46,6 +46,10 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { compressImage } from "@/lib/image-compression";
+import { SidebarProvider, SidebarTrigger, SidebarInset, useSidebar } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { AppHeader } from "@/components/app-header";
+import { useAuth } from "@/context/auth-context";
 
 // --- Types ---
 
@@ -89,9 +93,27 @@ interface Provider {
 // --- Main Component ---
 
 export default function Results() {
+    return (
+        <SidebarProvider>
+            <Suspense fallback={
+                <div className="flex min-h-screen w-full items-center justify-center bg-background">
+                    <Spinner className="size-8 text-muted-foreground" />
+                </div>
+            }>
+                <AppSidebar />
+                <SidebarInset className="flex flex-col min-h-screen bg-background">
+                    <ResultsContent />
+                </SidebarInset>
+            </Suspense>
+        </SidebarProvider>
+    );
+}
+
+function ResultsContent() {
     const router = useRouter();
-    const params = useParams();
-    const id = params?.id as string;
+    const { user } = useAuth();
+    const searchParams = useSearchParams();
+    const id = searchParams.get("id");
     
     // --- State: Core Data ---
     const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -234,6 +256,7 @@ export default function Results() {
             providers_json: finalProviders,
             device_type: deviceType,
             user_agent: navigator.userAgent,
+            user_id: user?.id,
             updated_at: new Date().toISOString()
         });
         if (error) console.error("Error saving conversation:", error);
@@ -859,8 +882,8 @@ export default function Results() {
 
     if (!isLoaded && !imageSrc) {
         return (
-            <div className="flex min-h-screen flex-col">
-                <AppHeader diagnosis={diagnosis} router={router} />
+            <div className="flex flex-1 flex-col">
+                <AppHeader isLoading />
                 <div className="flex flex-1 items-center justify-center">
                     <Spinner className="size-8 text-muted-foreground" />
                 </div>
@@ -873,8 +896,8 @@ export default function Results() {
     }
 
     return (
-        <div className="flex min-h-screen flex-col bg-background">
-            <AppHeader diagnosis={diagnosis} router={router} />
+        <div className="flex flex-col min-h-screen bg-background">
+            <AppHeader title={diagnosis?.diagnosis || "Chat Name"} />
 
             <main className="flex flex-1 flex-col">
                 <div className="max-w-3xl mx-auto w-full px-4 py-4">
@@ -964,30 +987,6 @@ export default function Results() {
 }
 
 // --- Sub-Components ---
-
-/**
- * Standard app header with dynamic diagnosis title and user avatar.
- */
-function AppHeader({ diagnosis, router }: { diagnosis: DiagnosisData | null, router: any }) {
-    return (
-        <header className="sticky top-0 z-50 bg-background">
-            <div className="mx-auto px-4 md:px-12 py-4 flex items-center justify-between gap-4">
-                <h1 className="text-lg font-semibold truncate flex-1 min-w-0">{diagnosis?.diagnosis || "Conversation Name"}</h1>
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <button className="size-8 rounded-full bg-secondary cursor-pointer hover:bg-secondary/80 transition-colors" />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-48 p-3" align="end">
-                        <div className="flex flex-col gap-2">
-                            <Button variant="ghost" className="justify-start font-normal" onClick={() => router.push("/settings")}>Settings</Button>
-                            <Button variant="ghost" className="justify-start font-normal" onClick={() => console.log("Logout clicked")}>Log Out</Button>
-                        </div>
-                    </PopoverContent>
-                </Popover>
-            </div>
-        </header>
-    );
-}
 
 /**
  * Displays the structured AI diagnosis and recommended actions.
@@ -1445,7 +1444,7 @@ function ProvidersSkeleton() {
 function NoImageFallback({ router, diagnosis }: any) {
     return (
         <div className="flex min-h-screen flex-col">
-            <AppHeader diagnosis={diagnosis} router={router} />
+            <AppHeader title={diagnosis?.diagnosis || "Chat Name"} />
             <div className="flex flex-1 items-center justify-center">
                 <p className="text-sm text-muted-foreground">No image found. Please go back and select an image.</p>
             </div>

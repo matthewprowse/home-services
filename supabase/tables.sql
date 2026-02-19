@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     device_type TEXT,
     user_agent TEXT,
     ip_hash TEXT,
+    user_id UUID REFERENCES auth.users(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
