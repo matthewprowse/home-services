@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
     try {
@@ -241,9 +241,25 @@ ${JSON.stringify(providersContext, null, 2)}`;
         });
 
         // Batch update the cache in the background (don't await it to keep response fast)
-        if (toCache.length > 0 && supabase) {
-            supabase.from('cached_providers').upsert(toCache).then(({ error }) => {
-                if (error) console.error("Background cache update failed:", error);
+        if (toCache.length > 0) {
+            createSupabaseAdminClient().then(adminSupabase => {
+                const dbToCache = toCache.map(p => ({
+                    place_id: p.place_id,
+                    name: p.name,
+                    address: p.address,
+                    rating: p.rating,
+                    rating_count: p.rating_count,
+                    phone: p.phone,
+                    website: p.website,
+                    latitude: p.latitude,
+                    longitude: p.longitude,
+                    summary: p.summary,
+                    services: p.services
+                }));
+                
+                adminSupabase.from('cached_providers').upsert(dbToCache).then(({ error }) => {
+                    if (error) console.error("Background cache update failed:", error);
+                });
             });
         }
 

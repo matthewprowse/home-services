@@ -28,3 +28,16 @@ export async function createSupabaseServerClient() {
 
 // Alias for compatibility while debugging
 export const createServerClient = createSupabaseServerClient;
+
+export async function createSupabaseAdminClient() {
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+            cookies: {
+                getAll() { return []; },
+                setAll() { },
+            },
+        }
+    );
+}
