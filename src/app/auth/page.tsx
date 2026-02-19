@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
-export default function AuthPage() {
+function AuthPageContent() {
     const searchParams = useSearchParams();
     const next = searchParams.get("next") || "/";
     const [email, setEmail] = useState("");
@@ -91,5 +91,29 @@ export default function AuthPage() {
                 </CardFooter>
             </Card>
         </div>
+    );
+}
+
+export default function AuthPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex min-h-screen items-center justify-center p-4 bg-background">
+                <Card className="w-full max-w-md border-input shadow-none">
+                    <CardHeader className="space-y-1 text-center animate-pulse">
+                        <div className="h-8 w-48 bg-muted rounded mx-auto mb-2" />
+                        <div className="h-4 w-64 bg-muted rounded mx-auto" />
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <div className="h-4 w-24 bg-muted rounded" />
+                            <div className="h-10 w-full bg-muted rounded" />
+                        </div>
+                        <div className="h-10 w-full bg-muted rounded" />
+                    </CardContent>
+                </Card>
+            </div>
+        }>
+            <AuthPageContent />
+        </Suspense>
     );
 }
