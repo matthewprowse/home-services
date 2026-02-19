@@ -1009,7 +1009,7 @@ function DiagnosisReport({ diagnosis }: { diagnosis: DiagnosisData | null }) {
  * Displays service badges in a single line with smart truncation.
  * Hides services that would be truncated by more than 25%.
  */
-function ServiceBadges({ services, trade, isOpen }: { services: any[]; trade?: string; isOpen?: boolean | null }) {
+function ServiceBadges({ services, trade, isOpen, providerName }: { services: any[]; trade?: string; isOpen?: boolean | null; providerName?: string }) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1146,14 +1146,16 @@ function ServiceBadges({ services, trade, isOpen }: { services: any[]; trade?: s
                         </Badge>
                     </PopoverTrigger>
                     <PopoverContent 
-                        className="w-64 p-3 shadow-xl rounded-md border-input" 
+                        className="w-72 p-3 shadow-xl rounded-md border-input" 
                         side="top" 
                         align="end"
                         onMouseEnter={() => setOpen(true)}
                         onMouseLeave={() => setOpen(false)}
                     >
                         <div className="flex flex-col gap-2">
-                            <p className="text-xs font-semibold uppercase text-muted-foreground">All Services</p>
+                            <p className="text-xs font-semibold capitalised text-muted-foreground truncate">
+                                {providerName ? (providerName.length > 25 ? providerName.substring(0, 22) + "..." : providerName) : "All"}'s Services
+                            </p>
                             <div className="flex flex-wrap gap-1.5">
                                 {sortedServices.filter(s => !s.isStatus).map((service, i) => (
                                     <Badge key={i} variant="secondary">
@@ -1213,7 +1215,7 @@ function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId, trade,
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <ServiceBadges services={provider.services || []} trade={trade} isOpen={provider.isOpen} />
+                        <ServiceBadges services={provider.services || []} trade={trade} isOpen={provider.isOpen} providerName={provider.name} />
                     </div>
                 </div>
             </CardHeader>
@@ -1234,17 +1236,20 @@ function ProviderCard({ provider, index, openPopoverId, setOpenPopoverId, trade,
                     <PopoverTrigger asChild>
                         <Button variant="default" className="flex-1">Contact</Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-48 p-2 rounded-md shadow-xl border-input" align="start" side="top">
+                    <PopoverContent className="w-56 p-3 rounded-md shadow-xl border-input" align="start" side="top">
                         <div className="flex flex-col gap-1">
+                            <p className="text-xs text-muted-foreground font-semibold mb-1">Recommended</p>
+                            <Button variant="secondary" className="justify-start w-full">Send Summary</Button>
+
+                            {/* <p className="text-xs text-muted-foreground py-1">Lorem ipsum dolor sit amet consectetur adipisicing elit.</p> */}
+                            
+                            <Separator className="my-2" />
+
                             {provider.phone && (
                                 <Button variant="ghost" className="justify-start w-full" asChild>
-                                    <a href={`tel:${provider.phone}`} className="flex items-center justify-between w-full">
-                                        Phone
-                                        <Badge variant="secondary" className="ml-auto bg-primary/10 text-primary border-none text-[10px] py-0 px-1.5 h-4.5 font-semibold">Immediate Help</Badge>
-                                    </a>
-                                </Button>
+                                    <a href={`tel:${provider.phone}`} className="flex items-center justify-between w-full">Immediate Assistance</a></Button>
                             )}
-                            <Button variant="ghost" className="justify-start" onClick={() => window.open(`mailto:info@${provider.name.toLowerCase().replace(/\s+/g, "")}.com`)}>Email Address</Button>
+                            <Button variant="ghost" className="justify-start" onClick={() => window.open(`mailto:info@${provider.name.toLowerCase().replace(/\s+/g, "")}.com`)}>Request Quote</Button>
                         </div>
                     </PopoverContent>
 
@@ -1355,7 +1360,7 @@ function ChatFooter({
                             }
                         }}
                         placeholder={isDisabled ? "Please wait..." : "Type Message..."}
-                        className="min-h-[80px] w-full resize-none p-3"
+                        className="min-h-[36px] md:min-h-[72px] w-full resize-none"
                         disabled={isDisabled}
                     />
                     <div className="flex justify-between items-center">
