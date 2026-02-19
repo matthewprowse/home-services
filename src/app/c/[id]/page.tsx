@@ -977,7 +977,7 @@ function AppHeader({ diagnosis, router }: { diagnosis: DiagnosisData | null, rou
                     <PopoverTrigger asChild>
                         <button className="size-8 rounded-full bg-secondary cursor-pointer hover:bg-secondary/80 transition-colors" />
                     </PopoverTrigger>
-                    <PopoverContent className="w-40 p-1" align="end">
+                    <PopoverContent className="w-36 p-3" align="end">
                         <div className="flex flex-col">
                             <Button variant="ghost" className="justify-start font-normal h-9 px-3" onClick={() => router.push("/settings")}>Settings</Button>
                             <Button variant="ghost" className="justify-start font-normal h-9 px-3 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" onClick={() => console.log("Logout clicked")}>Log out</Button>

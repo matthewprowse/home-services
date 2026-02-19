@@ -1,26 +1,19 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 // Singleton instance to avoid "Multiple GoTrueClient instances" warning
-let supabaseInstance: ReturnType<typeof createClient> | null = null;
+let supabaseInstance: any = null;
 
 export const getSupabase = () => {
   if (!supabaseInstance) {
     if (!supabaseUrl || !supabaseAnonKey) {
       console.warn("Supabase environment variables are missing. Client will not be initialized.");
-      return null as unknown as ReturnType<typeof createClient>;
+      return dummyClient;
     }
 
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        flowType: 'pkce'
-      }
-    })
+    supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey)
   }
   return supabaseInstance;
 }
