@@ -1015,7 +1015,13 @@ function ServiceBadges({ services, trade, isOpen }: { services: any[]; trade?: s
 
     // Normalize services to handle legacy string data or missing properties
     const normalizedServices = useMemo(() => {
-        const base = (services || []).map(s => {
+        interface ExtendedService {
+            short: string;
+            full: string;
+            isStatus?: boolean;
+        }
+
+        const base: ExtendedService[] = (services || []).map(s => {
             if (typeof s === 'string') return { short: s.slice(0, 15), full: s };
             return {
                 short: s?.short || s?.full?.slice(0, 15) || "Service",
