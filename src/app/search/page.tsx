@@ -1,25 +1,20 @@
-"use client";
+'use client';
 
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { AppHeader } from "@/components/app-header";
-import { Suspense } from "react";
-import { Spinner } from "@/components/ui/spinner";
+import { AppHeader } from '@/components/app-header';
+import { Suspense } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 
 export default function SearchPage() {
     return (
-        <SidebarProvider>
-            <Suspense fallback={
+        <Suspense
+            fallback={
                 <div className="flex min-h-screen w-full items-center justify-center bg-background">
                     <Spinner className="size-8 text-muted-foreground" />
                 </div>
-            }>
-                <AppSidebar />
-                <SidebarInset className="flex flex-col min-h-screen bg-background">
-                    <SearchContent />
-                </SidebarInset>
-            </Suspense>
-        </SidebarProvider>
+            }
+        >
+            <SearchContent />
+        </Suspense>
     );
 }
 

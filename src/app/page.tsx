@@ -1,12 +1,10 @@
-/**
- * File: page.tsx
- */
-
 "use client";
 
+import Image from "next/image";
+import { Button } from "@/components/ui/button";
+import { LandingHeader } from "@/components/landing-header";
 import { useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { setImageData } from "@/lib/image-store";
 import { compressImage } from "@/lib/image-compression";
 
@@ -47,24 +45,29 @@ export default function Home() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center">
-            <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                aria-hidden
-                onChange={(e) => {
-                    handleFileChosen(e.target.files?.[0]);
-                    e.target.value = "";
-                }}
-            />
-            <Button
-                type="button"
-                onClick={() => inputRef.current?.click()}
-            >
-                Diagnose Issue
-            </Button>
+        <div className="flex flex-col justify-center items-center min-h-screen bg-background">        
+            <div className="flex flex-col sm:flex-row items-center gap-4 w-full justify-center">
+                <input
+                    ref={inputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    aria-hidden
+                    onChange={(e) => {
+                        handleFileChosen(e.target.files?.[0]);
+                        e.target.value = "";
+                    }}
+                />
+                <Button 
+                    variant="secondary" 
+                    size="lg" 
+                    className="min-w-[164px]"
+                    onClick={() => inputRef.current?.click()}
+                >
+                    Start Diagnosis
+                </Button>
+                <Button variant="ghost" size="lg" className="min-w-[164px]">View Sample Report</Button>
+            </div>
         </div>
     );
 }

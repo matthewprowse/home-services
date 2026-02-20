@@ -1,5 +1,5 @@
-import { createServerClient as createClient, type CookieOptions } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createServerClient as createClient, type CookieOptions } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 export async function createSupabaseServerClient() {
     const cookieStore = await cookies();
@@ -35,8 +35,10 @@ export async function createSupabaseAdminClient() {
         process.env.SUPABASE_SERVICE_ROLE_KEY!,
         {
             cookies: {
-                getAll() { return []; },
-                setAll() { },
+                getAll() {
+                    return [];
+                },
+                setAll() {},
             },
         }
     );

@@ -10,12 +10,16 @@
  * @param quality - JPEG quality from 0 to 1 (default 0.8).
  * @returns A promise that resolves to the compressed base64 data URL.
  */
-export async function compressImage(dataUrl: string, maxWidth = 1024, quality = 0.8): Promise<string> {
+export async function compressImage(
+    dataUrl: string,
+    maxWidth = 1024,
+    quality = 0.8
+): Promise<string> {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.src = dataUrl;
         img.onload = () => {
-            const canvas = document.createElement("canvas");
+            const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
 
@@ -28,15 +32,15 @@ export async function compressImage(dataUrl: string, maxWidth = 1024, quality = 
             canvas.width = width;
             canvas.height = height;
 
-            const ctx = canvas.getContext("2d");
+            const ctx = canvas.getContext('2d');
             if (!ctx) {
-                reject(new Error("Could not get canvas context"));
+                reject(new Error('Could not get canvas context'));
                 return;
             }
 
             // Draw and compress
             ctx.drawImage(img, 0, 0, width, height);
-            const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
             resolve(compressedDataUrl);
         };
         img.onerror = (err) => reject(err);

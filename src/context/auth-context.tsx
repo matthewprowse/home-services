@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { createContext, useContext, useEffect, useState } from "react";
-import { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { createContext, useContext, useEffect, useState } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
 interface AuthContextType {
     user: User | null;
@@ -13,15 +13,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
+export function AuthProvider({
+    children,
+    initialUser = null,
+}: {
+    children: React.ReactNode;
+    initialUser?: User | null;
+}) {
+    const [user, setUser] = useState<User | null>(initialUser);
     const [session, setSession] = useState<Session | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(!initialUser);
 
     useEffect(() => {
         // Check for active session
         const initSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
             setSession(session);
             setUser(session?.user ?? null);
             setIsLoading(false);
@@ -30,7 +38,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         initSession();
 
         // Listen for changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+        const {
+            data: { subscription },
+        } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
             setSession(session);
             setUser(session?.user ?? null);
             setIsLoading(false);
@@ -53,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
     const context = useContext(AuthContext);
     if (context === undefined) {
-        throw new Error("useAuth must be used within an AuthProvider");
+        throw new Error('useAuth must be used within an AuthProvider');
     }
     return context;
 }
