@@ -1,6 +1,6 @@
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Paperclip, Cross as X } from 'geist-icons';
+import { Paperclip, Cross as X, Plus } from 'geist-icons';
 import { Spinner } from '@/components/ui/spinner';
 
 export function ChatFooter({
@@ -19,7 +19,46 @@ export function ChatFooter({
 
     return (
         <footer className="sticky bottom-0 z-50 bg-background">
-            <div className="max-w-3xl mx-auto px-4 py-4">
+            <div className="flex flex-row flex-nowrap items-stretch gap-2 p-4 max-w-3xl mx-auto w-full">
+                <div className="flex flex-col justify-start">
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => {
+                            handleFilesChosen(e.target.files);
+                            e.target.value = '';
+                        }}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isDisabled || attachments.length >= 5}
+                        className="flex-shrink-0 w-8 h-8 bg-secondary rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        <Plus size={16} />
+                    </button>
+                </div>
+                <Textarea
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSend();
+                        }
+                    }}
+                    placeholder={isDisabled ? 'Processing...' : 'Ask Anything...'}
+                    disabled={isDisabled}
+                    className="flex-1 min-w-0 min-h-16 max-h-[96px] resize-none placeholder:text-muted-foreground"
+                />
+                <div className="flex flex-col justify-end flex-shrink-0">
+                    <div className="w-8 h-8 bg-secondary rounded-full" />
+                </div>
+            </div>
+            {/* <div className="max-w-3xl mx-auto px-4 py-4">
                 {attachments.length > 0 && (
                     <div className="flex gap-3 mb-3 overflow-x-auto py-2 scrollbar-hide">
                         {attachments.map((src: string, i: number) => (
@@ -82,7 +121,7 @@ export function ChatFooter({
                         </Button>
                     </div>
                 </div>
-            </div>
+            </div> */}
         </footer>
     );
 }
